@@ -9,15 +9,21 @@ const router = new Router();
 // Configure email transporter
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, // true for 465, false for other ports
+  // Use the variable from Render, or fallback to 587 locally
+  port: Number(process.env.SMTP_PORT) || 587, 
+  // secure: false for 587, true for 465
+  secure: process.env.SMTP_SECURE === 'true', 
   auth: {
-    user: process.env.GMAIL_USER, // Your Gmail account
-    pass: process.env.GMAIL_APP_PASSWORD // Gmail app-specific password
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD
   },
   tls: {
-    rejectUnauthorized: false
-  }
+    // Helps with connection issues on some cloud providers
+    rejectUnauthorized: false,
+    minVersion: 'TLSv1.2'
+  },
+  connectionTimeout: 10000, // 10 seconds
+  greetingTimeout: 10000,
 });
 
 // POST /send endpoint
