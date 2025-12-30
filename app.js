@@ -1,6 +1,7 @@
 const Koa = require('koa');
 const Router = require('koa-router');
 const bodyParser = require('koa-bodyparser');
+const cors = require('@koa/cors');
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
@@ -10,22 +11,21 @@ const router = new Router();
 // Configure email transporter
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
-  // Port 465 is often more stable for Gmail in cloud environments
-  port: 465, 
-  secure: true, 
+  // Use the variable from Render, or fallback to 587 locally
+  port: Number(process.env.SMTP_PORT) || 587, 
+  // secure: false for 587, true for 465
+  secure: process.env.SMTP_SECURE === 'true', 
   auth: {
     user: process.env.GMAIL_USER,
-    // Use .replace to ensure no accidental spaces break the login
-    pass: process.env.GMAIL_APP_PASSWORD ? process.env.GMAIL_APP_PASSWORD.replace(/\s/g, '') : ''
+    pass: process.env.GMAIL_APP_PASSWORD
   },
   tls: {
+    // Helps with connection issues on some cloud providers
     rejectUnauthorized: false,
     minVersion: 'TLSv1.2'
   },
-  connectionTimeout: 10000,
+  connectionTimeout: 10000, // 10 seconds
   greetingTimeout: 10000,
-  // CRITICAL: Forces IPv4 to prevent cloud network resolution timeouts
-  family: 4 
 });
 
 // POST /send endpoint
@@ -33,6 +33,7 @@ router.post('/send', async (ctx) => {
   try {
     const { name, email, phone, remark } = ctx.request.body;
 
+    // Validate required fields
     if (!name || !email || !phone) {
       ctx.status = 400;
       ctx.body = {
@@ -42,9 +43,10 @@ router.post('/send', async (ctx) => {
       return;
     }
 
+    // Configure email options
     const mailOptions = {
       from: process.env.GMAIL_USER,
-      to: process.env.RECEIVER_EMAIL,
+      to: process.env.RECEIVER_EMAIL, // Fixed recipient email
       subject: `New Form Submission - ${name}`,
       html: `
         <h2>New Form Submission Received</h2>
@@ -57,7 +59,9 @@ router.post('/send', async (ctx) => {
       `
     };
 
+    // Send email
     const info = await transporter.sendMail(mailOptions);
+
     console.log('Email sent successfully:', info.messageId);
 
     ctx.status = 200;
@@ -69,6 +73,7 @@ router.post('/send', async (ctx) => {
 
   } catch (error) {
     console.error('Email sending failed:', error);
+
     ctx.status = 500;
     ctx.body = {
       success: false,
@@ -86,13 +91,15 @@ router.get('/health', async (ctx) => {
   };
 });
 
+// Use middleware
+app.use(cors())
 app.use(bodyParser());
 app.use(router.routes());
 app.use(router.allowedMethods());
 
-// START SERVER
+// Start server
 const PORT = process.env.PORT || 3000;
-// CRITICAL: Binds to 0.0.0.0 so Railway can perform health checks
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+  console.log(`Test endpoint: POST http://localhost:${PORT}/send`);
 });
